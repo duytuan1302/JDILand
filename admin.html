@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexLearn Admin — Quản lý nội dung</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #03060F; --bg2: #070D1A; --bg3: #0B1424;
+  --cyan: #00E5FF; --lime: #39FF14; --gold: #FFD600; --red: #FF1744;
+  --text: #E8F4F8; --muted: #5A7A8A;
+  --glass: rgba(0,229,255,0.04); --glass-border: rgba(0,229,255,0.12);
+  --glow: 0 0 20px rgba(0,229,255,0.35); --r: 12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999;}
+
+/* NAV */
+nav{height:64px;background:rgba(3,6,15,0.95);border-bottom:1px solid var(--glass-border);display:flex;align-items:center;padding:0 40px;gap:16px;position:sticky;top:0;z-index:100;}
+nav::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:1rem;letter-spacing:3px;color:var(--cyan);text-shadow:var(--glow);}
+.admin-badge{background:rgba(255,214,0,0.1);border:1px solid rgba(255,214,0,0.3);color:var(--gold);font-family:'Rajdhani',sans-serif;font-size:0.72rem;letter-spacing:2px;padding:3px 10px;border-radius:2px;}
+.nav-back{margin-left:auto;background:none;border:1px solid var(--glass-border);color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:0.78rem;letter-spacing:1px;padding:7px 16px;border-radius:4px;cursor:pointer;transition:all 0.2s;text-decoration:none;display:flex;align-items:center;gap:6px;}
+.nav-back:hover{border-color:var(--text);color:var(--text);}
+
+/* LAYOUT */
+.container{max-width:1100px;margin:0 auto;padding:40px 24px;}
+.page-title{font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;margin-bottom:6px;}
+.page-title span{color:var(--cyan);}
+.page-sub{color:var(--muted);font-size:0.88rem;margin-bottom:40px;}
+
+/* STEPS */
+.steps{display:flex;gap:0;margin-bottom:40px;}
+.step{flex:1;padding:14px 20px;background:var(--bg3);border:1px solid var(--glass-border);cursor:pointer;transition:all 0.25s;position:relative;}
+.step:first-child{border-radius:8px 0 0 8px;}
+.step:last-child{border-radius:0 8px 8px 0;}
+.step+.step{border-left:none;}
+.step.active{background:rgba(0,229,255,0.08);border-color:var(--cyan);}
+.step-num{font-family:'Orbitron',sans-serif;font-size:0.65rem;color:var(--muted);letter-spacing:2px;margin-bottom:4px;}
+.step-label{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:0.5px;}
+.step.active .step-label{color:var(--cyan);}
+.step.done .step-num{color:var(--lime);}
+.step.done .step-label{color:var(--lime);}
+
+/* PANELS */
+.panel{display:none;}
+.panel.active{display:block;animation:fadeIn 0.3s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* UPLOAD ZONE */
+.upload-zone{border:2px dashed rgba(0,229,255,0.25);border-radius:var(--r);padding:60px 40px;text-align:center;cursor:pointer;transition:all 0.3s;background:var(--glass);position:relative;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--cyan);background:rgba(0,229,255,0.06);}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.uz-icon{font-size:3rem;margin-bottom:16px;}
+.uz-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:0.5px;margin-bottom:8px;}
+.uz-sub{color:var(--muted);font-size:0.85rem;}
+.uz-types{display:flex;gap:8px;justify-content:center;margin-top:16px;}
+.uz-type{background:var(--bg3);border:1px solid var(--glass-border);border-radius:4px;padding:3px 12px;font-family:'Rajdhani',sans-serif;font-size:0.75rem;letter-spacing:1px;color:var(--muted);}
+
+/* FORM */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.form-group{margin-bottom:16px;}
+.form-label{display:block;font-family:'Rajdhani',sans-serif;font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg3);border:1px solid rgba(0,229,255,0.15);border-radius:6px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.9rem;outline:none;transition:all 0.2s;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,229,255,0.08);}
+.form-select option{background:var(--bg2);}
+.form-textarea{resize:vertical;min-height:120px;line-height:1.6;}
+
+/* CONTENT PREVIEW */
+.content-box{background:var(--bg3);border:1px solid var(--glass-border);border-radius:var(--r);padding:24px;margin-bottom:24px;max-height:400px;overflow-y:auto;}
+.content-box h1,.content-box h2,.content-box h3,.content-box h4{font-family:'Rajdhani',sans-serif;color:var(--cyan);margin:16px 0 8px;}
+.content-box p{color:rgba(232,244,248,0.75);font-size:0.88rem;line-height:1.7;margin-bottom:8px;}
+.content-box ul,.content-box ol{color:rgba(232,244,248,0.75);font-size:0.88rem;line-height:1.8;padding-left:20px;}
+
+/* LESSONS LIST */
+.lessons-list{display:flex;flex-direction:column;gap:10px;margin-bottom:24px;}
+.lesson-item{background:var(--bg3);border:1px solid var(--glass-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:14px;}
+.li-num{font-family:'Orbitron',sans-serif;font-size:0.7rem;color:var(--cyan);width:28px;flex-shrink:0;}
+.li-info{flex:1;}
+.li-title{font-weight:600;font-size:0.9rem;}
+.li-meta{color:var(--muted);font-size:0.75rem;margin-top:2px;}
+.li-actions{display:flex;gap:8px;}
+
+/* AI QUIZ */
+.quiz-gen-box{background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.15);border-radius:var(--r);padding:24px;margin-bottom:24px;}
+.qgb-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:1px;margin-bottom:12px;color:var(--cyan);}
+.quiz-item{background:var(--bg3);border:1px solid var(--glass-border);border-radius:10px;padding:18px 20px;margin-bottom:12px;}
+.qi-q{font-weight:600;font-size:0.9rem;margin-bottom:12px;}
+.qi-opts{display:flex;flex-direction:column;gap:6px;}
+.qi-opt{display:flex;align-items:center;gap:10px;font-size:0.85rem;color:rgba(232,244,248,0.7);}
+.qi-opt.correct{color:var(--lime);}
+.qi-key{width:22px;height:22px;border-radius:4px;border:1px solid currentColor;display:grid;place-items:center;font-family:'Orbitron',sans-serif;font-size:0.62rem;flex-shrink:0;}
+.qi-explain{margin-top:10px;padding:8px 12px;background:rgba(57,255,20,0.05);border-left:2px solid var(--lime);font-size:0.8rem;color:rgba(232,244,248,0.6);border-radius:0 6px 6px 0;}
+
+/* BUTTONS */
+.btn{padding:11px 24px;border-radius:6px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:2px;text-transform:uppercase;transition:all 0.25s;border:none;}
+.btn-primary{background:var(--cyan);color:var(--bg);box-shadow:var(--glow);}
+.btn-primary:hover{box-shadow:0 0 30px rgba(0,229,255,0.5);transform:translateY(-1px);}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+.btn-outline{background:transparent;border:1px solid var(--glass-border);color:var(--text);}
+.btn-outline:hover{border-color:var(--cyan);color:var(--cyan);}
+.btn-danger{background:transparent;border:1px solid rgba(255,23,68,0.3);color:#FF6B8A;}
+.btn-danger:hover{background:rgba(255,23,68,0.08);}
+.btn-sm{padding:7px 14px;font-size:0.75rem;}
+.btn-lime{background:transparent;border:1px solid var(--lime);color:var(--lime);}
+.btn-lime:hover{background:rgba(57,255,20,0.08);}
+.btn-row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+
+/* STATUS */
+.status-bar{background:var(--bg3);border:1px solid var(--glass-border);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:none;align-items:center;gap:12px;}
+.status-bar.show{display:flex;}
+.status-bar.loading{border-color:rgba(0,229,255,0.3);}
+.status-bar.success{border-color:rgba(57,255,20,0.3);}
+.status-bar.error{border-color:rgba(255,23,68,0.3);}
+.sb-icon{font-size:1.2rem;flex-shrink:0;}
+.sb-text{font-size:0.85rem;}
+.spin{animation:spin 1s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* COURSE LIST */
+.course-list{display:flex;flex-direction:column;gap:10px;}
+.course-row{background:var(--bg3);border:1px solid var(--glass-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;}
+.cr-emoji{font-size:1.8rem;width:44px;text-align:center;flex-shrink:0;}
+.cr-info{flex:1;}
+.cr-title{font-weight:700;font-size:0.95rem;}
+.cr-meta{color:var(--muted);font-size:0.78rem;margin-top:3px;}
+.cr-actions{display:flex;gap:8px;}
+
+.divider{height:1px;background:var(--glass-border);margin:28px 0;}
+.section-title-sm{font-family:'Rajdhani',sans-serif;font-size:0.72rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--glass-border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">NEXLEARN</div>
+  <div class="admin-badge">ADMIN PANEL</div>
+  <a href="index.html" class="nav-back">← Về website</a>
+</nav>
+
+<div class="container">
+  <div class="page-title">Quản lý <span>nội dung</span></div>
+  <div class="page-sub">Upload tài liệu Word → AI tự động tạo bài học và câu hỏi trắc nghiệm</div>
+
+  <!-- STEPS -->
+  <div class="steps">
+    <div class="step active" id="step1" onclick="goStep(1)">
+      <div class="step-num">BƯỚC 01</div>
+      <div class="step-label">Upload & Đặt tên khóa học</div>
+    </div>
+    <div class="step" id="step2" onclick="goStep(2)">
+      <div class="step-num">BƯỚC 02</div>
+      <div class="step-label">Xem nội dung & Tách bài học</div>
+    </div>
+    <div class="step" id="step3" onclick="goStep(3)">
+      <div class="step-num">BƯỚC 03</div>
+      <div class="step-label">AI tạo câu hỏi trắc nghiệm</div>
+    </div>
+    <div class="step" id="step4" onclick="goStep(4)">
+      <div class="step-num">BƯỚC 04</div>
+      <div class="step-label">Lưu vào hệ thống</div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <div class="sb-icon" id="sbIcon">⏳</div>
+    <div class="sb-text" id="sbText">Đang xử lý...</div>
+  </div>
+
+  <!-- PANEL 1: UPLOAD -->
+  <div class="panel active" id="panel1">
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" accept=".docx,.doc" id="fileInput" onchange="handleFile(this.files[0])">
+      <div class="uz-icon">📄</div>
+      <div class="uz-title">Kéo thả file Word vào đây</div>
+      <div class="uz-sub">hoặc nhấn để chọn file từ máy tính</div>
+      <div class="uz-types">
+        <span class="uz-type">.DOCX</span>
+        <span class="uz-type">.DOC</span>
+      </div>
+    </div>
+
+    <div id="fileInfo" style="display:none;margin-top:20px;">
+      <div class="divider"></div>
+      <div class="section-title-sm">Thông tin khóa học</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tên khóa học *</label>
+          <input class="form-input" id="courseTitle" placeholder="VD: Đào tạo nhân viên kinh doanh">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Danh mục</label>
+          <select class="form-select" id="courseCategory">
+            <option value="SALES">Sales & Kinh doanh</option>
+            <option value="AN TOÀN">An toàn & Bảo mật</option>
+            <option value="KỸ NĂNG MỀM">Kỹ năng mềm</option>
+            <option value="LEADERSHIP">Leadership</option>
+            <option value="NGHIỆP VỤ">Nghiệp vụ</option>
+            <option value="QUY TRÌNH">Quy trình nội bộ</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Emoji đại diện</label>
+          <input class="form-input" id="courseEmoji" placeholder="📚" value="📚" maxlength="2">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bắt buộc hoàn thành?</label>
+          <select class="form-select" id="courseRequired">
+            <option value="false">Không bắt buộc</option>
+            <option value="true">Bắt buộc</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="proceedToStep2()">Tiếp tục → Xem nội dung</button>
+        <span id="fileName" style="color:var(--muted);font-size:0.82rem;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: CONTENT & LESSONS -->
+  <div class="panel" id="panel2">
+    <div class="section-title-sm">Nội dung đọc được từ file</div>
+    <div class="content-box" id="contentPreview"></div>
+
+    <div class="divider"></div>
+    <div class="section-title-sm">Tách thành các bài học</div>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px;">Hệ thống đã tự động tách theo tiêu đề. Bạn có thể chỉnh tên từng bài.</p>
+
+    <div class="lessons-list" id="lessonsList"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goStep(1)">← Quay lại</button>
+      <button class="btn btn-primary" onclick="proceedToStep3()">Tiếp tục → AI tạo câu hỏi</button>
+    </div>
+  </div>
+
+  <!-- PANEL 3: AI QUIZ -->
+  <div class="panel" id="panel3">
+    <div class="quiz-gen-box">
+      <div class="qgb-title">⚡ Tạo câu hỏi tự động bằng AI</div>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px;">Chọn bài học và nhấn "Tạo câu hỏi" — AI sẽ đọc nội dung và tạo 4 câu hỏi trắc nghiệm phù hợp.</p>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Chọn bài học</label>
+          <select class="form-select" id="quizLessonSelect"></select>
+        </div>
+        <div class="form-group" style="margin:0;display:flex;align-items:flex-end;">
+          <button class="btn btn-primary" id="genBtn" onclick="generateQuiz()" style="width:100%;">✨ Tạo câu hỏi bằng AI</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="quizPreview" style="display:none;">
+      <div class="section-title-sm">Câu hỏi đã tạo — <span id="quizLessonName" style="color:var(--cyan);"></span></div>
+      <div id="quizItems"></div>
+      <div class="btn-row" style="margin-top:4px;">
+        <button class="btn btn-outline btn-sm" onclick="generateQuiz()">↺ Tạo lại</button>
+        <button class="btn btn-lime btn-sm" onclick="saveCurrentQuiz()">✓ Dùng bộ câu hỏi này</button>
+      </div>
+    </div>
+
+    <div id="savedQuizzes" style="margin-top:24px;"></div>
+
+    <div class="divider"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goStep(2)">← Quay lại</button>
+      <button class="btn btn-primary" onclick="proceedToStep4()">Tiếp tục → Lưu vào hệ thống</button>
+    </div>
+  </div>
+
+  <!-- PANEL 4: SAVE -->
+  <div class="panel" id="panel4">
+    <div style="background:rgba(57,255,20,0.05);border:1px solid rgba(57,255,20,0.2);border-radius:var(--r);padding:28px;margin-bottom:28px;">
+      <div style="font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--lime);margin-bottom:12px;">✓ Sẵn sàng lưu vào hệ thống</div>
+      <div id="saveSummary" style="color:rgba(232,244,248,0.7);font-size:0.88rem;line-height:1.8;"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goStep(3)">← Quay lại</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveAll()" style="font-size:1rem;padding:14px 36px;">
+        🚀 Lưu tất cả vào hệ thống
+      </button>
+    </div>
+
+    <div id="saveResult" style="display:none;margin-top:24px;"></div>
+  </div>
+
+</div>
+
+<script>
+// ── SUPABASE ──
+const SUPABASE_URL = 'https://ubqonewfwrecgiqrcltm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9T-h7ydyppapsEF5X_97FA_0TSBWfU3';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let docContent = '';
+let docHtml = '';
+let extractedLessons = [];
+let quizBank = {}; // lessonIndex -> questions[]
+
+// ── STEPS ──
+function goStep(n) {
+  for(let i=1;i<=4;i++){
+    document.getElementById('step'+i).className = 'step' + (i<n?' done':i===n?' active':'');
+    document.getElementById('panel'+i).className = 'panel' + (i===n?' active':'');
+  }
+}
+
+function showStatus(msg, type='loading') {
+  const bar = document.getElementById('statusBar');
+  const icons = {loading:'<span class="spin">⟳</span>', success:'✅', error:'❌'};
+  document.getElementById('sbIcon').innerHTML = icons[type];
+  document.getElementById('sbText').textContent = msg;
+  bar.className = `status-bar show ${type}`;
+  if(type !== 'loading') setTimeout(()=>bar.classList.remove('show'), 4000);
+}
+
+// ── FILE UPLOAD ──
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+async function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.docx?$/i)) { showStatus('Chỉ hỗ trợ file .docx hoặc .doc', 'error'); return; }
+  showStatus('Đang đọc file...');
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const result = await mammoth.convertToHtml({ arrayBuffer: e.target.result });
+      docHtml = result.value;
+      const textResult = await mammoth.extractRawText({ arrayBuffer: e.target.result });
+      docContent = textResult.value;
+
+      document.getElementById('fileInfo').style.display = 'block';
+      document.getElementById('fileName').textContent = '📄 ' + file.name;
+      // Auto-fill course title from filename
+      const autoTitle = file.name.replace(/\.(docx?)/i,'').replace(/_/g,' ').replace(/\s*\(Repaired\)/i,'').trim();
+      document.getElementById('courseTitle').value = autoTitle;
+
+      showStatus('Đọc file thành công! Điền thông tin và tiếp tục.', 'success');
+    } catch(err) {
+      showStatus('Lỗi đọc file: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── STEP 2: CONTENT & LESSONS ──
+function proceedToStep2() {
+  if (!docContent) { showStatus('Vui lòng upload file trước!', 'error'); return; }
+  if (!document.getElementById('courseTitle').value.trim()) { showStatus('Vui lòng nhập tên khóa học!', 'error'); return; }
+
+  // Show content
+  document.getElementById('contentPreview').innerHTML = docHtml;
+
+  // Extract lessons from headings
+  extractedLessons = extractLessons(docContent);
+  renderLessonsList();
+
+  // Populate quiz lesson select
+  const sel = document.getElementById('quizLessonSelect');
+  sel.innerHTML = extractedLessons.map((l,i) => `<option value="${i}">Bài ${i+1}: ${l.title}</option>`).join('');
+
+  goStep(2);
+}
+
+function extractLessons(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const lessons = [];
+  let currentLesson = null;
+  let currentContent = [];
+
+  // Simple heuristic: lines that are ALL CAPS or short (<80 chars) with no period = heading
+  for (const line of lines) {
+    const isHeading = (line === line.toUpperCase() && line.length > 3 && line.length < 120) ||
+                      (line.match(/^(I|II|III|IV|V|VI|VII|\d+)\.\s/) && line.length < 100) ||
+                      (line.match(/^(PHẦN|BƯỚC|CHƯƠNG)\s/i)) ||
+                      (line.match(/^(LỜI MỞ ĐẦU|KẾT LUẬN)/i));
+
+    if (isHeading && line.length > 5) {
+      if (currentLesson && currentContent.length > 0) {
+        lessons.push({ title: currentLesson, content: currentContent.join('\n') });
+      }
+      currentLesson = line;
+      currentContent = [];
+    } else if (currentLesson) {
+      currentContent.push(line);
+    }
+  }
+  if (currentLesson && currentContent.length > 0) {
+    lessons.push({ title: currentLesson, content: currentContent.join('\n') });
+  }
+
+  // If no structure found, split into chunks of ~500 words
+  if (lessons.length === 0) {
+    const words = text.split(/\s+/);
+    const chunkSize = 500;
+    for (let i = 0; i < words.length; i += chunkSize) {
+      const chunk = words.slice(i, i + chunkSize).join(' ');
+      lessons.push({ title: `Phần ${Math.floor(i/chunkSize)+1}`, content: chunk });
+    }
+  }
+
+  return lessons.slice(0, 20); // max 20 lessons
+}
+
+function renderLessonsList() {
+  const container = document.getElementById('lessonsList');
+  container.innerHTML = extractedLessons.map((l, i) => `
+    <div class="lesson-item">
+      <div class="li-num">BÀI ${String(i+1).padStart(2,'0')}</div>
+      <div class="li-info">
+        <input style="background:transparent;border:none;color:var(--text);font-family:'DM Sans';font-size:0.9rem;font-weight:600;width:100%;outline:none;border-bottom:1px solid transparent;transition:border 0.2s;"
+          onfocus="this.style.borderBottomColor='var(--cyan)'" onblur="this.style.borderBottomColor='transparent'"
+          value="${l.title}" onchange="extractedLessons[${i}].title=this.value">
+        <div class="li-meta">${l.content.split(' ').length} từ · ${Math.ceil(l.content.split(' ').length/130)} phút đọc</div>
+      </div>
+      <div class="li-actions">
+        <button class="btn btn-danger btn-sm" onclick="removeLesson(${i})">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function removeLesson(i) {
+  extractedLessons.splice(i, 1);
+  renderLessonsList();
+  const sel = document.getElementById('quizLessonSelect');
+  sel.innerHTML = extractedLessons.map((l,i) => `<option value="${i}">Bài ${i+1}: ${l.title}</option>`).join('');
+}
+
+// ── STEP 3: AI QUIZ ──
+function proceedToStep3() {
+  if (extractedLessons.length === 0) { showStatus('Cần ít nhất 1 bài học!', 'error'); return; }
+  goStep(3);
+}
+
+async function generateQuiz() {
+  const idx = parseInt(document.getElementById('quizLessonSelect').value);
+  const lesson = extractedLessons[idx];
+  if (!lesson) return;
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true; btn.textContent = '⟳ Đang tạo câu hỏi...';
+  showStatus('AI đang đọc nội dung và tạo câu hỏi...');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Dựa vào nội dung bài học sau, hãy tạo ĐÚNG 4 câu hỏi trắc nghiệm bằng tiếng Việt.
+Yêu cầu:
+- Mỗi câu có 4 lựa chọn A, B, C, D
+- Câu hỏi phải kiểm tra được kiến thức quan trọng trong bài
+- Phải có 1 đáp án đúng và giải thích ngắn gọn
+
+Trả về JSON theo đúng format này (không có text khác):
+[
+  {
+    "question": "Câu hỏi?",
+    "option_a": "Lựa chọn A",
+    "option_b": "Lựa chọn B",
+    "option_c": "Lựa chọn C",
+    "option_d": "Lựa chọn D",
+    "correct_answer": "A",
+    "explanation": "Giải thích ngắn gọn tại sao đúng"
+  }
+]
+
+NỘI DUNG BÀI HỌC:
+${lesson.content.substring(0, 3000)}`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content[0].text;
+    const clean = text.replace(/```json|```/g, '').trim();
+    const questions = JSON.parse(clean);
+
+    quizBank[idx] = questions;
+    renderQuizPreview(idx, questions);
+    showStatus('Tạo câu hỏi thành công!', 'success');
+  } catch(err) {
+    showStatus('Lỗi tạo câu hỏi: ' + err.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = '✨ Tạo câu hỏi bằng AI';
+}
+
+function renderQuizPreview(idx, questions) {
+  const lesson = extractedLessons[idx];
+  document.getElementById('quizLessonName').textContent = lesson.title;
+  const keys = ['A','B','C','D'];
+  document.getElementById('quizItems').innerHTML = questions.map((q,i) => `
+    <div class="quiz-item">
+      <div class="qi-q">Câu ${i+1}: ${q.question}</div>
+      <div class="qi-opts">
+        ${['a','b','c','d'].map((k,j) => `
+          <div class="qi-opt ${q.correct_answer===keys[j]?'correct':''}">
+            <span class="qi-key">${keys[j]}</span>
+            ${q['option_'+k]}
+            ${q.correct_answer===keys[j]?' ✓':''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="qi-explain">💡 ${q.explanation}</div>
+    </div>
+  `).join('');
+  document.getElementById('quizPreview').style.display = 'block';
+}
+
+function saveCurrentQuiz() {
+  const idx = parseInt(document.getElementById('quizLessonSelect').value);
+  if (!quizBank[idx]) { showStatus('Chưa có câu hỏi để lưu!', 'error'); return; }
+
+  const lesson = extractedLessons[idx];
+  const saved = document.getElementById('savedQuizzes');
+  const existing = document.getElementById('saved-'+idx);
+  if (existing) existing.remove();
+
+  const div = document.createElement('div');
+  div.id = 'saved-'+idx;
+  div.style.cssText = 'background:rgba(57,255,20,0.05);border:1px solid rgba(57,255,20,0.2);border-radius:8px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;';
+  div.innerHTML = `
+    <span style="color:var(--lime);font-size:1rem;">✓</span>
+    <span style="font-size:0.85rem;flex:1;"><strong>Bài ${idx+1}:</strong> ${lesson.title} — ${quizBank[idx].length} câu hỏi đã sẵn sàng</span>
+    <button class="btn btn-danger btn-sm" onclick="document.getElementById('saved-${idx}').remove();delete quizBank[${idx}];">✕</button>
+  `;
+  saved.appendChild(div);
+  document.getElementById('quizPreview').style.display = 'none';
+  showStatus('Đã lưu bộ câu hỏi cho: ' + lesson.title, 'success');
+}
+
+// ── STEP 4: SAVE ALL ──
+function proceedToStep4() {
+  const quizCount = Object.keys(quizBank).length;
+  const title = document.getElementById('courseTitle').value;
+  document.getElementById('saveSummary').innerHTML = `
+    📚 <strong>Khóa học:</strong> ${title}<br>
+    📋 <strong>Số bài học:</strong> ${extractedLessons.length} bài<br>
+    ✏️ <strong>Bộ câu hỏi:</strong> ${quizCount} bài có trắc nghiệm (${quizCount * 4} câu tổng)<br>
+    🏷️ <strong>Danh mục:</strong> ${document.getElementById('courseCategory').value}<br>
+    ⚡ <strong>Bắt buộc:</strong> ${document.getElementById('courseRequired').value === 'true' ? 'Có' : 'Không'}
+  `;
+  goStep(4);
+}
+
+async function saveAll() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = '⟳ Đang lưu...';
+  showStatus('Đang lưu khóa học vào database...');
+
+  try {
+    // 1. Insert course
+    const { data: course, error: courseErr } = await sb.from('courses').insert({
+      title: document.getElementById('courseTitle').value,
+      category: document.getElementById('courseCategory').value,
+      thumbnail_emoji: document.getElementById('courseEmoji').value || '📚',
+      is_required: document.getElementById('courseRequired').value === 'true',
+      total_lessons: extractedLessons.length,
+      duration_minutes: extractedLessons.reduce((acc,l) => acc + Math.ceil(l.content.split(' ').length/130), 0),
+      description: `Khóa học được tạo tự động từ tài liệu nội bộ.`
+    }).select().single();
+
+    if (courseErr) throw courseErr;
+
+    // 2. Insert lessons
+    for (let i = 0; i < extractedLessons.length; i++) {
+      const lesson = extractedLessons[i];
+      const { data: lessonData, error: lessonErr } = await sb.from('lessons').insert({
+        course_id: course.id,
+        title: lesson.title,
+        description: lesson.content.substring(0, 500),
+        lesson_order: i + 1,
+        duration_minutes: Math.ceil(lesson.content.split(' ').length / 130)
+      }).select().single();
+
+      if (lessonErr) throw lessonErr;
+
+      // 3. Insert quiz questions if any
+      if (quizBank[i] && quizBank[i].length > 0) {
+        const questionsToInsert = quizBank[i].map(q => ({
+          lesson_id: lessonData.id,
+          question: q.question,
+          option_a: q.option_a,
+          option_b: q.option_b,
+          option_c: q.option_c,
+          option_d: q.option_d,
+          correct_answer: q.correct_answer,
+          explanation: q.explanation
+        }));
+        const { error: qErr } = await sb.from('quiz_questions').insert(questionsToInsert);
+        if (qErr) throw qErr;
+      }
+    }
+
+    // SUCCESS
+    showStatus('Đã lưu thành công!', 'success');
+    document.getElementById('saveResult').style.display = 'block';
+    document.getElementById('saveResult').innerHTML = `
+      <div style="background:rgba(57,255,20,0.06);border:1px solid rgba(57,255,20,0.25);border-radius:var(--r);padding:28px;text-align:center;">
+        <div style="font-size:3rem;margin-bottom:12px;">🎉</div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--lime);margin-bottom:8px;">Lưu thành công!</div>
+        <div style="color:rgba(232,244,248,0.7);font-size:0.88rem;margin-bottom:20px;">
+          Khóa học <strong>${document.getElementById('courseTitle').value}</strong><br>
+          đã được thêm vào hệ thống với ${extractedLessons.length} bài học.
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <a href="index.html" style="padding:10px 24px;background:var(--cyan);color:var(--bg);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:2px;border-radius:6px;text-decoration:none;box-shadow:var(--glow);">
+            Xem website →
+          </a>
+          <button onclick="location.reload()" style="padding:10px 24px;background:transparent;border:1px solid var(--glass-border);color:var(--text);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:2px;border-radius:6px;cursor:pointer;">
+            Upload khóa học khác
+          </button>
+        </div>
+      </div>
+    `;
+    btn.style.display = 'none';
+  } catch(err) {
+    showStatus('Lỗi: ' + err.message, 'error');
+    btn.disabled = false; btn.textContent = '🚀 Lưu tất cả vào hệ thống';
+  }
+}
+</script>
+</body>
+</html>
