@@ -1446,6 +1446,30 @@ sb.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     const u = session.user;
     const meta = u.user_metadata || {};
+
+    // Load tiến độ bài học từ Supabase
+    const { data: progressRows } = await sb.from('progress')
+      .select('lesson_id, completed')
+      .eq('user_id', u.id)
+      .eq('completed', true);
+
+    const completedLessons = progressRows ? progressRows.map(r => r.lesson_id) : [];
+
+    // Tính tiến độ từng module dựa trên bài đã hoàn thành
+    const prog = {1:0, 2:0, 3:0, 4:0};
+    MODULES.forEach(m => {
+      const modLessons = m.lessons_data.map(l => l.id);
+      const modDone = modLessons.filter(id => completedLessons.includes(id)).length;
+      if (modDone > 0) prog[m.id] = Math.round((modDone / modLessons.length) * 70);
+    });
+
+    // Load điểm quiz
+    const { data: quizRows } = await sb.from('quiz_results')
+      .select('*')
+      .eq('user_id', u.id);
+    const quizScores = {};
+    if (quizRows) quizRows.forEach(r => { if (r.module_id) quizScores[r.module_id] = r.score; });
+
     currentUser = {
       id: u.id,
       email: u.email,
@@ -1453,9 +1477,12 @@ sb.auth.onAuthStateChange(async (event, session) => {
       role: meta.role || 'sale',
       branch: meta.branch === 'nhatrang' ? 'Nha Trang' : 'Hà Nội',
       joined: u.created_at ? u.created_at.split('T')[0] : '2025-01-01',
-      progress: {1:0, 2:0, 3:0, 4:0},
-      quizScores: {},
-      completedLessons: []
+      avatar_url: meta.avatar_url || null,
+      phone: meta.phone || '',
+      bio: meta.bio || '',
+      progress: prog,
+      quizScores: quizScores,
+      completedLessons: completedLessons
     };
     USERS[u.email] = currentUser;
     startApp();
@@ -2233,19 +2260,33 @@ function renderLesson(el) {
   if (!USERS[currentUser.email].completedLessons) USERS[currentUser.email].completedLessons = [];
   if (!USERS[currentUser.email].completedLessons.includes(lesson.id)) {
     USERS[currentUser.email].completedLessons.push(lesson.id);
+    currentUser.completedLessons = USERS[currentUser.email].completedLessons;
     // update progress
-    const totalLessons = MODULES.reduce((a,m)=>a+m.lessons_data.length, 0);
-    const done = USERS[currentUser.email].completedLessons.length;
     const modLessons = currentModule.lessons_data.map(l=>l.id);
     const modDone = modLessons.filter(id=>USERS[currentUser.email].completedLessons.includes(id)).length;
     USERS[currentUser.email].progress[currentModule.id] = Math.round((modDone/modLessons.length)*70);
     currentUser.progress = USERS[currentUser.email].progress;
     updateProgressPill();
+    // Lưu vào Supabase
+    saveLessonProgress(lesson.id, currentModule.id);
   }
 }
 
 function prevLesson() {
   if (currentLesson > 0) { currentLesson--; renderLesson(document.getElementById('page-content')); }
+}
+
+async function saveLessonProgress(lessonId, moduleId) {
+  if (!currentUser?.id) return;
+  try {
+    // Lưu bài học đã hoàn thành
+    await sb.from('progress').upsert({
+      user_id: currentUser.id,
+      lesson_id: lessonId,
+      completed: true,
+      completed_at: new Date().toISOString()
+    }, { onConflict: 'user_id,lesson_id' });
+  } catch(e) { console.warn('Không thể lưu tiến độ:', e); }
 }
 function nextLesson() {
   if (currentLesson < currentModule.lessons_data.length - 1) { currentLesson++; renderLesson(document.getElementById('page-content')); }
