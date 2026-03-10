@@ -2387,6 +2387,9 @@ function renderResult(el) {
   const pct = Math.round((quizState.score / qd.questions.length) * 100);
   const pass = pct >= qd.passMark;
   const wrong = qd.questions.length - quizState.score;
+
+  // Cập nhật local state
+  if (!USERS[currentUser.email].quizScores) USERS[currentUser.email].quizScores = {};
   USERS[currentUser.email].quizScores[currentQuizModule] = pct;
   currentUser.quizScores = USERS[currentUser.email].quizScores;
   if (pass) {
@@ -2394,6 +2397,20 @@ function renderResult(el) {
     currentUser.progress = USERS[currentUser.email].progress;
     updateProgressPill();
   }
+
+  // Lưu lên Supabase — bọc trong try/catch, không await để không block UI
+  if (currentUser?.id) {
+    sb.from('quiz_results').insert({
+      user_id: currentUser.id,
+      module_id: currentQuizModule,
+      score: pct,
+      total_questions: qd.questions.length,
+      passed: pass
+    }).then(({ error }) => {
+      if (error) console.warn('Không thể lưu kết quả quiz:', error.message);
+    });
+  }
+
   el.innerHTML = `
     <div style="padding-top:40px">
       <div class="result-card">
